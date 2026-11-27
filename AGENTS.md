@@ -33,7 +33,7 @@ T projects are not collections of ad-hoc scripts; they are **pipelines**.
 - **Standard Interchange**: **Apache Arrow** is the default for DataFrames. Ensure nodes use `serializer = arrow` when passing tables between languages.
 - **Model Interchange**: Use **PMML** for statistical models and **ONNX** for deep learning/ML models.
 - **Raw Data**: Treat the `data/` directory as read-only. Never modify raw input files programmatically.
-- **Schema Safety**: Use `$col syntax in colcraft verbs to ensure column references are correctly handled by T's non-standard evaluation.**
+- **Schema Safety**: Use the `$col` syntax in colcraft verbs so that T's non-standard evaluation resolves column references correctly.
 
 ---
 
@@ -87,7 +87,7 @@ p = pipeline {
 | :--- | :--- |
 | **Sync Environment** | `t update` |
 | **Run Analysis** | `t run src/pipeline.t` |
-| **Run Tests** | `t test` |
+| **Run Tests (release gate)** | `t test --json` — structured report, the contract for agents and CI |
 | **Debug a Node** | `t explain --node p.name` (add `--json` for machine-readable JSON) |
 | **Check Health** | `t doctor` |
 | **Schema Check** | `t check --schema src/pipeline.t` |
@@ -101,3 +101,41 @@ Always include `intent { ... }` blocks in your scripts to document:
 - **Assumptions**: What must be true about the data?
 - **Goals**: What is this specific script/node trying to achieve?
 - **Dependencies**: Which columns or upstream nodes are required?
+
+---
+
+## 9. Language Semantic Guardrails (Mandatory)
+
+These are the failure modes AI agents reproduce most often in analytical code. They are **prohibitions**, not preferences: a diff that violates one of them is rejected in review.
+
+### Python
+
+- **Immutability**: NEVER use `inplace=True` on pandas objects (`.drop()`, `.fillna()`, `.reset_index()`). Return a new DataFrame via `.assign()`, `.copy()`, or a functional transformation. Mutating an input argument is forbidden.
+- **No Mutable Defaults**: Never define a function with a mutable default argument (`def f(x=[])`, `def f(opts={})`). Defaults must be `None`, numbers, strings, or tuples.
+- **Strict Scoping**: Every name in a function body must come from a parameter, an import, or a local assignment. No reads of module-level or notebook globals — pass all data in explicitly. This is what makes a `pyn()` node testable in isolation.
+- **Fail Loudly**: Never write `except Exception:` or a bare `except:` that returns `None` or a default value. Catch only specific, anticipated errors (`FileNotFoundError`). Unexpected errors must propagate and stop the build.
+- **Numerical Tolerance**: Never assert float equality (`==`, `!=`) on computed quantities (sums, proportions, ratios). Use `np.isclose()`, `math.isclose()`, `pytest.approx()`, or `expect_equal()`.
+- **Explicit Missingness**: Test `df.empty`, `len(series) == 0`, or `x is None` — never `if df:` or `if not weights:`.
+
+### R
+
+- **Pure Functions**: Write modular functions in `R/` or `src/`. Never call `setwd()`, mutate global `options()`, or use `<<-`.
+- **Explicit Length Checks**: Guard element-wise arithmetic with `stopifnot(length(a) == length(b))`; never rely on silent vector recycling.
+- **Defensive Missingness**: Handle `NA` and `NULL` explicitly (`is.na()`, `length(x) == 0`); do not assume a vector is non-empty.
+
+---
+
+## 10. Verification Protocol & Oracles
+
+- **The gate**: before reporting any task complete, run
+
+  ```bash
+  t test --json
+  ```
+
+  A task is done only when the report's `status` is `"passed"` with zero failures. Plain `t test` is for human inspection; the JSON form is the contract with agents and CI.
+- **Integrity of oracles**: You are STRICTLY FORBIDDEN from modifying test assertions, golden datasets, or fixtures in `tests/` in order to make failing code pass. If a test fails against the oracle, the bug is in the implementation.
+- **Golden snapshots**: when refactoring a data-wrangling node, prove output equivalence against the verified reference data in `tests/fixtures/`.
+- **Read-only inputs**: `data/` and `tests/fixtures/` are immutable. Generated artifacts belong in node storage and are exported with `pipeline_copy()`.
+- **Review hand-off**: finish by presenting the diff (`git diff`, `git add -p`), not a prose summary. A claim of success without a passing `t test --json` is treated as a failure.
+
