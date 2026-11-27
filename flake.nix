@@ -56,14 +56,27 @@
         });
 
         # Python environment
-        # No Python packages declared: bare interpreter only (nodes use
-        # pipeline.nix envs). Declaring any Python dependency restores py-env.
-        py-env = pkgs.python314;
+        py-env = (pkgs.python314.withPackages (python-pkgs: with python-pkgs; [
+          deepdiff
+          pandas
+          numpy
+          pyarrow
+          pytest
+        ])).override {
+          makeWrapperArgs = [
+            "--prefix" "LD_LIBRARY_PATH" ":" "${pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.zlib ]}"
+          ];
+        };
 
         # Julia environment
         # No Julia packages declared: bare interpreter only (nodes use
         # pipeline.nix envs). Declaring any Julia dependency restores juliaPkg.
         juliaPkg = pkgs.julia-lts;
+
+        # Additional Tools
+        additionalTools = with pkgs; [
+          git
+        ];
       in
       {
         devShells.default = pkgs.mkShell {
@@ -73,7 +86,7 @@
             py-env
             juliaPkg
             t-lang.packages.${system}.tlang-julia-path
-          ];
+          ] ++ additionalTools;
 
           shellHook = ''
             export PYTHONPATH="${t-lang.packages.${system}.default}/share/tlang/py-package/src:''${PYTHONPATH:-}"
