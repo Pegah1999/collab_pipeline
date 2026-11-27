@@ -1,0 +1,9 @@
+respondent_id,group,score
+1," Alpha ",10
+2,beta,20
+3," Alpha ",30
+,Beta,40
+5,gamma,-999
+6,"Beta ",55
+7,alpha,-999
+8," Gamma",70
