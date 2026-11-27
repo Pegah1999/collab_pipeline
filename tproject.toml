@@ -40,7 +40,7 @@ command = ""
 # If quarto is listed here, run `t update` and then `nix develop` to
 # provision `_extensions/tlang` automatically from the T flake so Quarto
 # can render `{t}` chunks.
-packages = []
+packages = ["git"]
 
 [latex]
 # LaTeX packages (starts from scheme-small, add packages here)
